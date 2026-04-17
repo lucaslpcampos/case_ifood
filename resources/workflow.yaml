@@ -1,0 +1,87 @@
+resources:
+  jobs:
+    taxi_nyc_pipeline:
+      name: ifood-taxi-nyc-${bundle.target}
+      max_concurrent_runs: 1
+      tags:
+        project: ifood-case
+        layer: medallion-4
+
+      tasks:
+        # ── YELLOW: ingestion (paralelo com green) ──────────────
+        - task_key: download_yellow
+          notebook_task:
+            notebook_path: ../src/ingestion/00_download_landing.py
+            base_parameters:
+              taxi_type: "yellow"
+              catalog: ${var.catalog}
+
+        - task_key: bronze_yellow
+          depends_on:
+            - task_key: download_yellow
+          notebook_task:
+            notebook_path: ../src/ingestion/01_landing_to_bronze.py
+            base_parameters:
+              taxi_type: "yellow"
+              catalog: ${var.catalog}
+
+        - task_key: silver_yellow
+          depends_on:
+            - task_key: bronze_yellow
+          notebook_task:
+            notebook_path: ../src/processing/02_bronze_to_silver.py
+            base_parameters:
+              taxi_type: "yellow"
+              catalog: ${var.catalog}
+
+        # ── GREEN: ingestion (paralelo com yellow) ──────────────
+        - task_key: download_green
+          notebook_task:
+            notebook_path: ../src/ingestion/00_download_landing.py
+            base_parameters:
+              taxi_type: "green"
+              catalog: ${var.catalog}
+
+        - task_key: bronze_green
+          depends_on:
+            - task_key: download_green
+          notebook_task:
+            notebook_path: ../src/ingestion/01_landing_to_bronze.py
+            base_parameters:
+              taxi_type: "green"
+              catalog: ${var.catalog}
+
+        - task_key: silver_green
+          depends_on:
+            - task_key: bronze_green
+          notebook_task:
+            notebook_path: ../src/processing/02_bronze_to_silver.py
+            base_parameters:
+              taxi_type: "green"
+              catalog: ${var.catalog}
+
+        # ── GOLD: converge yellow + green ───────────────────────
+        - task_key: gold_dimensions
+          depends_on:
+            - task_key: silver_yellow
+            - task_key: silver_green
+          notebook_task:
+            notebook_path: ../src/processing/03_gold_dimensions.py
+            base_parameters:
+              catalog: ${var.catalog}
+
+        - task_key: gold_facts
+          depends_on:
+            - task_key: gold_dimensions
+          notebook_task:
+            notebook_path: ../src/processing/04_gold_facts.py
+            base_parameters:
+              catalog: ${var.catalog}
+
+        - task_key: gold_cumulative
+          depends_on:
+            - task_key: gold_facts
+          notebook_task:
+            notebook_path: ../src/processing/05_gold_cumulative.py
+            base_parameters:
+              catalog: ${var.catalog}

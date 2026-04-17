@@ -1,0 +1,28 @@
+bundle:
+  name: ifood-taxi-nyc
+  uuid: meu-uuid
+
+include:
+  - resources/workflow.yaml
+
+sync:
+  exclude:
+    - .claude/
+    - .claude/**
+
+variables:
+  catalog:
+    description: Unity Catalog root
+    default: ifood
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
