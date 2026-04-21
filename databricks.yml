@@ -1,6 +1,6 @@
 bundle:
   name: ifood-taxi-nyc
-  uuid: meu-uuid
+  uuid: 53f5f430-08d1-4ecd-8fd4-cbfb00e477c2
 
 include:
   - resources/workflow.yaml
@@ -9,6 +9,9 @@ sync:
   exclude:
     - .claude/
     - .claude/**
+    - tests/
+    - tests/**
+    - presentation_notes_real_world_scenarios.md
 
 variables:
   catalog:

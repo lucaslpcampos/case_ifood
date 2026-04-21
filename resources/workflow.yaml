@@ -8,10 +8,10 @@ resources:
         layer: medallion-4
 
       tasks:
-        # ── YELLOW: ingestion (paralelo com green) ──────────────
+        # YELLOW: ingestion in parallel with green
         - task_key: download_yellow
           notebook_task:
-            notebook_path: ../src/ingestion/00_download_landing.py
+            notebook_path: ../src/00_download_landing.py
             base_parameters:
               taxi_type: "yellow"
               catalog: ${var.catalog}
@@ -20,7 +20,7 @@ resources:
           depends_on:
             - task_key: download_yellow
           notebook_task:
-            notebook_path: ../src/ingestion/01_landing_to_bronze.py
+            notebook_path: ../src/01_landing_to_bronze.py
             base_parameters:
               taxi_type: "yellow"
               catalog: ${var.catalog}
@@ -29,15 +29,15 @@ resources:
           depends_on:
             - task_key: bronze_yellow
           notebook_task:
-            notebook_path: ../src/processing/02_bronze_to_silver.py
+            notebook_path: ../src/02_bronze_to_silver.py
             base_parameters:
               taxi_type: "yellow"
               catalog: ${var.catalog}
 
-        # ── GREEN: ingestion (paralelo com yellow) ──────────────
+        # GREEN: ingestion in parallel with yellow
         - task_key: download_green
           notebook_task:
-            notebook_path: ../src/ingestion/00_download_landing.py
+            notebook_path: ../src/00_download_landing.py
             base_parameters:
               taxi_type: "green"
               catalog: ${var.catalog}
@@ -46,7 +46,7 @@ resources:
           depends_on:
             - task_key: download_green
           notebook_task:
-            notebook_path: ../src/ingestion/01_landing_to_bronze.py
+            notebook_path: ../src/01_landing_to_bronze.py
             base_parameters:
               taxi_type: "green"
               catalog: ${var.catalog}
@@ -55,18 +55,18 @@ resources:
           depends_on:
             - task_key: bronze_green
           notebook_task:
-            notebook_path: ../src/processing/02_bronze_to_silver.py
+            notebook_path: ../src/02_bronze_to_silver.py
             base_parameters:
               taxi_type: "green"
               catalog: ${var.catalog}
 
-        # ── GOLD: converge yellow + green ───────────────────────
+        # GOLD: converge yellow + green
         - task_key: gold_dimensions
           depends_on:
             - task_key: silver_yellow
             - task_key: silver_green
           notebook_task:
-            notebook_path: ../src/processing/03_gold_dimensions.py
+            notebook_path: ../src/03_gold_dimensions.py
             base_parameters:
               catalog: ${var.catalog}
 
@@ -74,14 +74,14 @@ resources:
           depends_on:
             - task_key: gold_dimensions
           notebook_task:
-            notebook_path: ../src/processing/04_gold_facts.py
+            notebook_path: ../src/04_gold_facts.py
             base_parameters:
               catalog: ${var.catalog}
 
-        - task_key: gold_cumulative
+        - task_key: gold_aggregates
           depends_on:
             - task_key: gold_facts
           notebook_task:
-            notebook_path: ../src/processing/05_gold_cumulative.py
+            notebook_path: ../src/05_gold_aggregates.py
             base_parameters:
               catalog: ${var.catalog}

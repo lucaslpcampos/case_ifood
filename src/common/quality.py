@@ -1,56 +1,56 @@
-# Databricks notebook source
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC # Quality Rules
-# MAGIC Regras de DQ para a camada Silver (clean + quarantine split).
-# MAGIC DQ Gold usa **Delta Constraints** (enforcement nativo na escrita).
-
-# COMMAND ----------
-
 from pyspark.sql.functions import (
     array,
     array_compact,
+    coalesce,
     col,
     current_timestamp,
     lit,
     when,
 )
 
-# COMMAND ----------
+def silver_rules(study_start_date, study_end_exclusive):
+    return {
+        "passenger_count_not_null": col("passenger_count").isNotNull(),
+        "passenger_count_positive": col("passenger_count") > 0,
+        "dropoff_after_pickup": col("dropoff_datetime") > col("pickup_datetime"),
+        "total_amount_non_negative": col("total_amount") >= 0,
+        "pickup_not_null": col("pickup_datetime").isNotNull(),
+        "dropoff_not_null": col("dropoff_datetime").isNotNull(),
+        "vendor_not_null": col("VendorID").isNotNull(),
+        "pickup_in_study_range": (
+            (col("pickup_datetime") >= lit(study_start_date).cast("timestamp"))
+            & (col("pickup_datetime") < lit(study_end_exclusive).cast("timestamp"))
+        ),
+    }
 
-SILVER_RULES = {
-    "passenger_count_positive": col("passenger_count") > 0,
-    "dropoff_after_pickup": col("dropoff_datetime") > col("pickup_datetime"),
-    "total_amount_non_negative": col("total_amount") >= 0,
-    "pickup_not_null": col("pickup_datetime").isNotNull(),
-    "dropoff_not_null": col("dropoff_datetime").isNotNull(),
-    "vendor_not_null": col("VendorID").isNotNull(),
+
+QUALITY_RULESET_KEYS = {
+    "trip_silver": silver_rules,
 }
 
-# COMMAND ----------
 
-def apply_silver_rules(df):
+def apply_silver_rules(df, study_start_date, study_end_exclusive):
+    rules = silver_rules(study_start_date, study_end_exclusive)
     passes = lit(True)
-    for pred in SILVER_RULES.values():
-        passes = passes & pred
-    clean = df.filter(passes)
+    for predicate in rules.values():
+        passes = passes & coalesce(predicate, lit(False))
 
+    clean = df.filter(passes)
     rejection_reasons = array_compact(
-        array(*[
-            when(~pred, lit(name)).otherwise(lit(None))
-            for name, pred in SILVER_RULES.items()
-        ])
+        array(
+            *[
+                when(~coalesce(predicate, lit(False)), lit(rule_name)).otherwise(lit(None))
+                for rule_name, predicate in rules.items()
+            ]
+        )
     )
-    bad = (
+    quarantined = (
         df.filter(~passes)
         .withColumn("_quarantined_at", current_timestamp())
         .withColumn("_rejection_reasons", rejection_reasons)
     )
-    return clean, bad
+    return clean, quarantined
 
-# COMMAND ----------
 
 GOLD_CONSTRAINTS = {
     "fact_trip": [
@@ -65,8 +65,7 @@ def apply_gold_constraints(spark, fqn, table_key):
     for ddl_template in GOLD_CONSTRAINTS.get(table_key, []):
         try:
             spark.sql(ddl_template.format(fqn=fqn))
-        except Exception as e:
-            if "CONSTRAINT_ALREADY_EXISTS" in str(e) or "already exists" in str(e):
-                pass
-            else:
-                raise
+        except Exception as exc:
+            if "CONSTRAINT_ALREADY_EXISTS" in str(exc) or "already exists" in str(exc):
+                continue
+            raise
