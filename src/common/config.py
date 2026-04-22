@@ -60,5 +60,12 @@ def get_landing_path(catalog, taxi_type):
     return f"{get_volume_root(catalog)}/{TAXI_CONFIGS[taxi_type]['landing_subpath']}"
 
 
+def get_landing_month_path(catalog, taxi_type, year, month):
+    return (
+        f"{get_landing_path(catalog, taxi_type)}"
+        f"/year={year}/month={month:02d}"
+    )
+
+
 def get_fqn(catalog, schema, table):
     return f"{catalog}.{schema}.{table}"

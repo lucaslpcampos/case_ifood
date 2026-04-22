@@ -1,133 +1,143 @@
 # iFood Case - NYC Taxi Pipeline
 
-Pipeline de dados em arquitetura Medallion com 4 camadas:
-Landing -> Bronze -> Silver -> Gold.
+Pipeline de dados em arquitetura Medallion para corridas de taxi de NYC.
+O projeto ingere dados `yellow` e `green` da TLC para o periodo de janeiro a maio de 2023, trata schema drift e data quality, e publica tabelas analiticas na Gold.
 
-A solucao ingere corridas yellow e green taxi da TLC (jan-mai/2023), aplica data quality com quarantine, materializa dimensoes, fato transacional e fatos agregados, e responde:
+O pipeline responde as seguintes perguntas do case:
 
-- **Q1** - Media mensal de `total_amount` considerando os yellow taxis.
-- **Q2** - Media de `passenger_count` por hora do dia em maio/2023 considerando todos os taxis.
+- Q1: media mensal de `total_amount` considerando os `yellow taxis`
+- Q2: media de `passenger_count` por hora do dia em maio de 2023 considerando todos os taxis
 
----
+## Overview
 
-## Arquitetura
+Arquitetura implementada:
 
 ```text
-TLC CloudFront -> Landing (UC Volume)
-                    |
-             +------+------+
-             |             |
-             v             v
-      Auto Loader     Auto Loader
-        (yellow)        (green)
-             |             |
-             v             v
-      Bronze.yellow   Bronze.green
-             |             |
-             v             v
-      Silver.yellow   Silver.green
-             |             |
-             +------+------+
-                    |
-                    v
-                 Gold Layer
-          +---------+---------+---------+
-          |         |         |         |
-          v         v         v         v
-      dim_date  dim_vendor  fact_trip  agg_trip_monthly_taxi
-                              |
-                              v
-                    agg_trip_hourly_daily
+TLC CloudFront -> Landing -> Bronze -> Silver -> Gold
 ```
 
-Yellow e green rodam em paralelo ate a Silver e convergem na Gold.
+Camadas:
 
----
+- `Landing`: recebimento bruto dos arquivos parquet
+- `Bronze`: preservacao fiel da origem com tratamento de schema drift
+- `Silver`: padronizacao, data quality e quarantine
+- `Gold`: dimensoes, fato transacional e fatos agregados para consumo
+
+Principais entregaveis:
+
+- `dim_date`
+- `dim_vendor`
+- `fact_trip`
+- `agg_trip_monthly_taxi`
+- `agg_trip_hourly_daily`
 
 ## Estrutura do Repositorio
 
 ```text
 src/
-  common/           modulos compartilhados (config, schemas, quality, utils)
-  pipeline/         logica de negocio importavel/testavel localmente
+  common/           configuracoes, schemas, regras de qualidade e utils
+  pipeline/         logica principal do pipeline
     ingestion/      download_landing.py, landing_to_bronze.py
     processing/     bronze_to_silver.py, gold_dimensions.py,
                     gold_facts.py, gold_aggregates.py
-  00_*.py           wrappers finos em formato source notebook Databricks
-analysis/           scripts/notebooks com EDA e respostas do case
-resources/          workflow.yaml com a DAG do job
-databricks.yml      configuracao do bundle
+  00_*.py           notebooks wrappers em source format Databricks
+analysis/           EDA e respostas do case
+resources/          workflow do Databricks job
+databricks.yml      configuracao do Databricks Asset Bundle
 requirements.txt    dependencias Python
 ```
 
-Os arquivos numerados em `src/` continuam sendo notebooks Databricks em source format.
-Eles apenas recebem widgets e chamam funcoes Python puras em `src/pipeline/`.
+Os notebooks numerados em `src/` sao entrypoints finos para execucao no Databricks.
+A logica principal fica em `src/pipeline/` e `src/common/`, o que reduz acoplamento a notebooks e facilita manutencao.
 
-Esse arranjo preserva a estrutura pedida no case (`src/` + `analysis/`) e reduz o acoplamento a `%run`, facilitando testes locais, manutencao e revisao de codigo.
+## Como Executar
 
----
+### Pre-requisitos
 
-## Decisoes Tecnicas
+- conta no Databricks Free Edition
+- Unity Catalog habilitado
+- Databricks CLI v0.218.0 ou superior
+- Python com dependencias de `requirements.txt`
 
-| Decisao | Justificativa |
-|---|---|
-| **Medallion 4-layer** | Landing separada do Bronze para auditoria e reprocessamento |
-| **Wrappers + modulos Python** | Notebooks finos para o Databricks, logica principal em modulos reutilizaveis |
-| **Bronze permissiva** | Bronze absorve variacoes conhecidas de schema da fonte sem empurrar dados validos para `_rescued_data` |
-| **Auto Loader `availableNow`** | Idempotencia via checkpoint, com processamento incremental nativo |
-| **MERGE por `tripsk` (sha256)** | Idempotencia total com surrogate key baseada em atributos do registro |
-| **DDL explicito + Liquid Clustering** | Tabelas com schema declarado e `CLUSTER BY` para performance |
-| **Delta Constraints (Gold)** | Enforcement de regras criticas de qualidade na escrita |
-| **Gold em Spark SQL** | Transformacoes legiveis para stakeholders e avaliadores |
-| **Fatos agregados orientados a consumo** | Facilita responder o case sem abrir mao da `fact_trip` como base canonica |
-
----
-
-## Setup - Databricks Free Edition
-
-### 1. Workspace
-
-Criar workspace em [databricks.com/learn/free-edition](https://www.databricks.com/learn/free-edition).
-Unity Catalog ja vem habilitado.
-
-### 2. Deploy via Bundle
+### 1. Configurar ambiente local
 
 ```bash
-pip install databricks-cli
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 2. Instalar e autenticar a Databricks CLI
+
+Para comandos de `bundle`, use a Databricks CLI atual, nao o pacote legado `databricks-cli`.
+
+No Windows, uma opcao simples e:
+
+```bash
+winget install Databricks.DatabricksCLI
+databricks -v
+```
+
+#### Autenticacao recomendada
+
+O modo recomendado pela Databricks e OAuth para usuario.
+Se preferir seguir por token pessoal no workspace, use o fluxo abaixo.
+
+#### Como gerar um token pessoal
+
+No workspace Databricks:
+
+1. clique no seu usuario no canto superior direito
+2. acesse `Settings`
+3. abra `Developer`
+4. em `Access tokens`, clique em `Manage`
+5. clique em `Generate new token`
+
+#### Permissoes necessarias para o token
+
+Tokens pessoais do Databricks nao usam escopos por token.
+O ponto importante e que:
+
+- a autenticacao por Personal Access Token esteja habilitada no workspace
+- o seu usuario tenha permissao `CAN USE` para criar e usar tokens
+
+Depois disso, configure a autenticacao local:
+
+```bash
 databricks configure --token
+```
+
+Voce devera informar:
+
+- `Databricks Host`: URL do seu workspace, por exemplo `https://dbc-xxxxxx.cloud.databricks.com`
+- `Token`: o PAT gerado no passo anterior
+
+### 3. Validar e publicar o bundle
+
+```bash
 databricks bundle validate
 databricks bundle deploy -t dev
+```
+
+### 4. Executar o pipeline completo
+
+```bash
 databricks bundle run taxi_nyc_pipeline -t dev
 ```
 
-### 3. Execucao manual
+O workflow executa:
 
-Execute os notebooks numerados em `src/` na sequencia abaixo:
-
-- `src/00_download_landing.py`
-- `src/01_landing_to_bronze.py`
-- `src/02_bronze_to_silver.py`
-- `src/03_gold_dimensions.py`
-- `src/04_gold_facts.py`
-- `src/05_gold_aggregates.py`
-
-Parametros:
-
-- `taxi_type` = `yellow` ou `green` para os steps 00, 01 e 02
-- `catalog` = `ifood`
-
-Observacoes:
-
-- `src/common/` e `src/pipeline/` sao arquivos Python normais, importados pelos notebooks wrappers.
-- `analysis/01_eda.py` adiciona `src/` ao `sys.path` para reutilizar a mesma configuracao compartilhada.
-
----
+1. download dos arquivos `yellow` e `green`
+2. carga em `Landing`
+3. processamento para `Bronze`
+4. processamento para `Silver`
+5. publicacao da `Gold`
 
 ## Plano B - Internet bloqueada na Free Edition
 
-Se o download falhar:
+Se o download direto da TLC falhar no workspace, os arquivos podem ser baixados localmente e enviados para o volume da landing.
 
-1. Baixe localmente:
+### 1. Baixar localmente
 
 ```bash
 for type in yellow green; do
@@ -137,44 +147,57 @@ for type in yellow green; do
 done
 ```
 
-2. Suba ao Volume:
+### 2. Enviar para o volume
 
 ```bash
 for type in yellow green; do
   for m in 01 02 03 04 05; do
     databricks fs cp "${type}_tripdata_2023-${m}.parquet" \
-      "dbfs:/Volumes/ifood/taxi_nyc_landing/raw/${type}/"
+      "dbfs:/Volumes/ifood/taxi_nyc_landing/raw/${type}/year=2023/month=${m}"
   done
 done
 ```
 
-3. Execute o pipeline a partir do step `01_landing_to_bronze`.
+### 3. Executar a partir da Bronze
 
----
+Depois do upload, rode novamente o job completo:
 
-## Data Quality
+```bash
+databricks bundle run taxi_nyc_pipeline -t dev
+```
 
-| Camada | Mecanismo | Regras |
-|---|---|---|
-| **Bronze** | Auto Loader + projeção explicita | preserva o dado de origem com tipos amplos; `_rescued_data` fica reservado para drift inesperado |
-| **Silver** | `quality.py` (clean + quarantine split) | `passenger_count > 0`, `dropoff > pickup`, `total_amount >= 0`, nulls obrigatorios |
-| **Gold** | Delta Constraints | `total_amount >= 0`, `passenger_count > 0`, `duration_seconds >= 0` |
-| **Gold** | Assertions nos modulos | integridade de dimensoes e ausencia de duplicatas |
+Como os arquivos ja estarao presentes na landing, o step de download apenas fara `SKIP` para os arquivos existentes.
 
----
+## Onde Estao as Respostas do Case
 
-## Desenvolvimento Local
+Consultas finais:
 
-A logica principal do pipeline agora esta concentrada em:
+- `analysis/02_case_answers.sql`
 
-- `src/common/`
-- `src/pipeline/ingestion/`
-- `src/pipeline/processing/`
+Material exploratorio:
 
-Com isso, a maior parte do codigo pode ser importada e validada localmente sem depender de `%run`.
+- `analysis/01_eda.py`
 
----
+Tabelas finais para avaliacao:
 
-## Autor
+- `ifood.taxi_nyc_gold.fact_trip`
+- `ifood.taxi_nyc_gold.agg_trip_monthly_taxi`
+- `ifood.taxi_nyc_gold.agg_trip_hourly_daily`
+- `ifood.taxi_nyc_gold.dim_date`
+- `ifood.taxi_nyc_gold.dim_vendor`
 
-Lucas Pereira Campos - case iFood (Data Architect).
+## Principais Decisoes Tecnicas
+
+- `Landing -> Bronze -> Silver -> Gold` para separar recebimento, preservacao, conformidade e consumo
+- notebooks finos + modulos Python reutilizaveis para equilibrar Databricks e testabilidade
+- Auto Loader com `availableNow` para ingestao incremental orientada a arquivos
+- tratamento ativo de schema drift na Bronze para evitar nulls artificiais e uso indevido de `_rescued_data`
+- quarantine na Silver para proteger o contrato analitico da Gold
+- `fact_trip` como base canonica e agregados materializados para facilitar consumo
+- `MERGE` por `tripsk` para suportar processamento incremental e reruns mais seguros
+
+## Observacoes
+
+- O projeto foi pensado para Databricks Free Edition.
+- A landing usa paths deterministicas por `year/month` para reduzir risco de duplicidade em reruns.
+- A Gold foi modelada para responder o case de forma simples, mantendo uma fato detalhada e agregados prontos para consumo.

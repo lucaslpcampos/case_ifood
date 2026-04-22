@@ -38,17 +38,25 @@ def ensure_gold_fact_table(spark, context):
 
 
 def build_fact_union_parts(spark, context):
+    missing_tables = [
+        silver_fqn
+        for silver_fqn in context["silver_inputs"].values()
+        if not spark.catalog.tableExists(silver_fqn)
+    ]
+    if missing_tables:
+        missing_list = ", ".join(sorted(missing_tables))
+        raise ValueError(f"Missing required silver tables: {missing_list}")
+
     union_parts = []
     for taxi_type, silver_fqn in context["silver_inputs"].items():
-        if spark.catalog.tableExists(silver_fqn):
-            union_parts.append(
-                build_fact_select_query(
-                    silver_fqn,
-                    taxi_type,
-                    STUDY_START_DATE,
-                    STUDY_END_EXCLUSIVE,
-                )
+        union_parts.append(
+            build_fact_select_query(
+                silver_fqn,
+                taxi_type,
+                STUDY_START_DATE,
+                STUDY_END_EXCLUSIVE,
             )
+        )
     return union_parts
 
 
@@ -93,6 +101,9 @@ def validate_fact_dimensions(spark, context):
 
     assert orphan_dates == 0, (
         f"{orphan_dates} rows in fact_trip are missing a matching dim_date row"
+    )
+    assert orphan_vendors == 0, (
+        f"{orphan_vendors} rows in fact_trip are missing a matching dim_vendor row"
     )
     return {
         "rows": rows_fact,

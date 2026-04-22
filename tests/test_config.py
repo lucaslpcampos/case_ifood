@@ -1,4 +1,9 @@
-from common.config import FACT_SOURCE_TAXI_TYPES, TAXI_CONFIGS, get_landing_path
+from common.config import (
+    FACT_SOURCE_TAXI_TYPES,
+    TAXI_CONFIGS,
+    get_landing_month_path,
+    get_landing_path,
+)
 
 
 def test_taxi_configs_expose_runtime_settings_for_both_taxi_types():
@@ -11,3 +16,12 @@ def test_taxi_configs_expose_runtime_settings_for_both_taxi_types():
 def test_get_landing_path_uses_taxi_landing_subpath():
     assert get_landing_path("ifood", "yellow").endswith("/raw/yellow")
     assert get_landing_path("ifood", "green").endswith("/raw/green")
+
+
+def test_get_landing_month_path_uses_deterministic_source_partition():
+    assert get_landing_month_path("ifood", "yellow", 2023, 1).endswith(
+        "/raw/yellow/year=2023/month=01"
+    )
+    assert get_landing_month_path("ifood", "green", 2023, 5).endswith(
+        "/raw/green/year=2023/month=05"
+    )
