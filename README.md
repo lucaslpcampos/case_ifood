@@ -97,11 +97,10 @@ No workspace Databricks:
 
 #### Permissoes necessarias para o token
 
-Tokens pessoais do Databricks nao usam escopos por token.
+Tokens pessoais do Databricks usam escopos por token.
 O ponto importante e que:
 
-- a autenticacao por Personal Access Token esteja habilitada no workspace
-- o seu usuario tenha permissao `CAN USE` para criar e usar tokens
+- Defina o escopos necessários para subir o projeto. Para fins de teste pode selecionar a opção "all api"
 
 Depois disso, configure a autenticacao local:
 
