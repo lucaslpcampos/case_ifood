@@ -1,4 +1,17 @@
-def build_dim_date_query(study_start_date, study_end_exclusive):
+"""Builders SQL usados pelas tabelas analiticas da camada Gold."""
+
+
+def build_dim_date_query(study_start_date: str, study_end_exclusive: str) -> str:
+    """
+    Gera a query SQL de construcao da dimensao de datas.
+
+    Args:
+        study_start_date: Data inicial inclusiva do intervalo de estudo.
+        study_end_exclusive: Data final exclusiva do intervalo de estudo.
+
+    Returns:
+        Query SQL que expande uma linha por dia no intervalo informado.
+    """
     return f"""
         SELECT
             INT(date_format(full_date, 'yyyyMMdd')) AS date_key,
@@ -22,7 +35,16 @@ def build_dim_date_query(study_start_date, study_end_exclusive):
     """
 
 
-def build_dim_vendor_query():
+def build_dim_vendor_query() -> str:
+    """
+    Gera a query SQL da dimensao estatica de vendors.
+
+    Args:
+        None.
+
+    Returns:
+        Query SQL com o mapeamento padrao de vendors da TLC.
+    """
     return """
         SELECT CAST(vendor_id AS INT) AS vendor_id, vendor_name, vendor_short_name
         FROM VALUES
@@ -34,7 +56,16 @@ def build_dim_vendor_query():
     """
 
 
-def build_agg_trip_hourly_daily_query(fact_fqn):
+def build_agg_trip_hourly_daily_query(fact_fqn: str) -> str:
+    """
+    Gera a query SQL do agregado diario por hora e tipo de taxi.
+
+    Args:
+        fact_fqn: Nome totalmente qualificado da fato transacional.
+
+    Returns:
+        Query SQL que agrega viagens por data, hora e tipo de taxi.
+    """
     return f"""
         SELECT
             date_key,
@@ -53,7 +84,16 @@ def build_agg_trip_hourly_daily_query(fact_fqn):
     """
 
 
-def build_agg_trip_monthly_taxi_query(fact_fqn):
+def build_agg_trip_monthly_taxi_query(fact_fqn: str) -> str:
+    """
+    Gera a query SQL do agregado mensal por tipo de taxi.
+
+    Args:
+        fact_fqn: Nome totalmente qualificado da fato transacional.
+
+    Returns:
+        Query SQL que agrega viagens por ano, mes e tipo de taxi.
+    """
     return f"""
         SELECT
             INT(date_format(pickup_datetime, 'yyyyMM')) AS month_key,
@@ -74,7 +114,24 @@ def build_agg_trip_monthly_taxi_query(fact_fqn):
     """
 
 
-def build_fact_select_query(silver_fqn, taxi_type, study_start_date, study_end_exclusive):
+def build_fact_select_query(
+    silver_fqn: str,
+    taxi_type: str,
+    study_start_date: str,
+    study_end_exclusive: str,
+) -> str:
+    """
+    Gera a query SQL que projeta uma tabela Silver para a fato canonica.
+
+    Args:
+        silver_fqn: Nome totalmente qualificado da tabela Silver de origem.
+        taxi_type: Tipo de taxi associado a tabela Silver.
+        study_start_date: Data inicial inclusiva do intervalo de estudo.
+        study_end_exclusive: Data final exclusiva do intervalo de estudo.
+
+    Returns:
+        Query SQL pronta para compor a `fact_trip`.
+    """
     return f"""
         SELECT
             s.tripsk,

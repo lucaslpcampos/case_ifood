@@ -214,8 +214,8 @@ metastore_db/
 derby.log
 .databricks/
 databricks-logs/
-.claude
 .idea/
 *.code-workspace
 .DS_Store
 Thumbs.db
+docs/

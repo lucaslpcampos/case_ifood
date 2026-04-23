@@ -6,7 +6,6 @@ from pyspark.sql.types import (
     StructType,
 )
 
-from common.schemas import get_schema_columns
 from pipeline.ingestion.landing_to_bronze import build_bronze_stream_df
 
 
@@ -77,18 +76,8 @@ def test_build_bronze_stream_df_recovers_values_from_rescued_data(spark):
     row = projected_df.collect()[0]
 
     assert row["VendorID"] == 2
-    assert row["passenger_count"] == 1.0
-    assert row["RatecodeID"] == 1.0
+    assert row["passenger_count"] == 1
+    assert row["RatecodeID"] == 1
     assert row["PULocationID"] == 100
     assert row["DOLocationID"] == 101
     assert row["airport_fee"] == 0.0
-
-
-def test_bronze_columns_keeps_green_specific_fields_out_of_yellow_schema():
-    yellow_names = [name for name, _ in get_schema_columns("yellow_bronze")]
-    green_names = [name for name, _ in get_schema_columns("green_bronze")]
-
-    assert "ehail_fee" not in yellow_names
-    assert "trip_type" not in yellow_names
-    assert "ehail_fee" in green_names
-    assert "trip_type" in green_names

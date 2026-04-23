@@ -1,7 +1,10 @@
+"""Funcoes de download e planejamento da landing zone."""
+
 import os
 import time
 
 import requests
+from pyspark.sql import SparkSession
 
 from common.config import (
     DOWNLOAD_MAX_RETRIES,
@@ -16,7 +19,19 @@ from common.config import (
 from common.utils import ensure_schemas, ensure_volume
 
 
-def download_file(url, target, timeout, max_retries):
+def download_file(url: str, target: str, timeout: int, max_retries: int) -> int:
+    """
+    Faz o download de um arquivo para o destino final com retry e arquivo temporario.
+
+    Args:
+        url: URL de origem do arquivo.
+        target: Path final onde o arquivo deve ser salvo.
+        timeout: Timeout de cada tentativa de requisicao, em segundos.
+        max_retries: Numero maximo de tentativas de download.
+
+    Returns:
+        Quantidade de bytes gravados no arquivo final.
+    """
     last_exc = None
     temp_target = f"{target}.part"
     for attempt in range(1, max_retries + 1):
@@ -46,7 +61,17 @@ def download_file(url, target, timeout, max_retries):
     ) from last_exc
 
 
-def build_download_context(taxi_type, catalog):
+def build_download_context(taxi_type: str, catalog: str) -> dict[str, object]:
+    """
+    Monta o contexto operacional usado pelo step de download.
+
+    Args:
+        taxi_type: Tipo de taxi configurado em `TAXI_CONFIGS`.
+        catalog: Nome do catalogo Unity Catalog.
+
+    Returns:
+        Dicionario com configuracoes e paths necessarios para o download.
+    """
     taxi_cfg = TAXI_CONFIGS[taxi_type]
     landing_path = get_landing_path(catalog, taxi_type)
     return {
@@ -57,12 +82,31 @@ def build_download_context(taxi_type, catalog):
     }
 
 
-def ensure_landing_storage(spark, catalog):
+def ensure_landing_storage(spark: SparkSession, catalog: str) -> None:
+    """
+    Garante a existencia do schema e do volume usados pela landing zone.
+
+    Args:
+        spark: Sessao Spark ativa.
+        catalog: Nome do catalogo Unity Catalog.
+
+    Returns:
+        None. A funcao executa DDLs para preparar a landing.
+    """
     ensure_schemas(spark, catalog, [SCHEMA_LANDING])
     ensure_volume(spark, catalog, SCHEMA_LANDING, VOLUME_NAME)
 
 
-def build_download_plan(context):
+def build_download_plan(context: dict[str, object]) -> list[dict[str, object]]:
+    """
+    Gera o plano de download dos arquivos esperados para um tipo de taxi.
+
+    Args:
+        context: Contexto operacional retornado por `build_download_context`.
+
+    Returns:
+        Lista ordenada de itens com URL, particao e destino de cada arquivo.
+    """
     taxi_type = context["taxi_type"]
     taxi_cfg = context["taxi_cfg"]
 
@@ -85,7 +129,16 @@ def build_download_plan(context):
     return plan
 
 
-def execute_download_plan(plan):
+def execute_download_plan(plan: list[dict[str, object]]) -> dict[str, int]:
+    """
+    Executa o plano de download e contabiliza arquivos baixados e ignorados.
+
+    Args:
+        plan: Lista de itens retornada por `build_download_plan`.
+
+    Returns:
+        Dicionario com a quantidade de arquivos baixados e pulados.
+    """
     downloaded_files = 0
     skipped_files = 0
 

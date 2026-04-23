@@ -59,6 +59,8 @@ A logica principal fica em `src/pipeline/` e `src/common/`, o que reduz acoplame
 - Databricks CLI v0.218.0 ou superior
 - Python com dependencias de `requirements.txt`
 
+O projeto foi desenhado e testado pensando no Databricks Free Edition. Outros workspaces podem funcionar, mas as instrucoes abaixo assumem esse ambiente.
+
 ### 1. Configurar ambiente local
 
 ```bash
@@ -137,6 +139,8 @@ O workflow executa:
 
 Se o download direto da TLC falhar no workspace, os arquivos podem ser baixados localmente e enviados para o volume da landing.
 
+Os comandos abaixo estao em `bash`. No Windows, eles podem ser executados em um terminal como `Git Bash` ou `WSL`. No PowerShell, a sintaxe dos loops precisa ser adaptada.
+
 ### 1. Baixar localmente
 
 ```bash
@@ -147,7 +151,20 @@ for type in yellow green; do
 done
 ```
 
-### 2. Enviar para o volume
+### 2. Criar pastas da landing
+
+Se o step padrao de download falhar antes de criar os caminhos da landing, crie os diretorios manualmente antes do upload:
+
+```bash
+for type in yellow green; do
+  for m in 01 02 03 04 05; do
+    databricks fs mkdirs \
+      "dbfs:/Volumes/ifood/taxi_nyc_landing/raw/${type}/year=2023/month=${m}"
+  done
+done
+```
+
+### 3. Enviar para o volume
 
 ```bash
 for type in yellow green; do
@@ -158,7 +175,7 @@ for type in yellow green; do
 done
 ```
 
-### 3. Executar a partir da Bronze
+### 4. Executar novamente o pipeline
 
 Depois do upload, rode novamente o job completo:
 
@@ -168,6 +185,32 @@ databricks bundle run taxi_nyc_pipeline -t dev
 
 Como os arquivos ja estarao presentes na landing, o step de download apenas fara `SKIP` para os arquivos existentes.
 
+## Troubleshooting
+
+### Erro temporario de import no Databricks
+
+Se apos o deploy algum notebook falhar ao importar objetos de `src/common/` ou `src/pipeline/`, valide primeiro se o bundle foi publicado novamente:
+
+```bash
+databricks bundle deploy -t dev
+```
+
+Em seguida, rode o job novamente:
+
+```bash
+databricks bundle run taxi_nyc_pipeline -t dev
+```
+
+Em alguns casos no Databricks Free Edition/serverless, erros transitorios de import podem ser resolvidos com uma nova execucao do job ou reinicializacao da sessao.
+
+### Download bloqueado no workspace
+
+Se o workspace nao conseguir acessar a URL da TLC, use o Plano B acima para baixar localmente e enviar os arquivos para o volume.
+
+### Landing inexistente no Plano B
+
+Se o upload manual falhar por caminho inexistente, execute antes a etapa `Criar pastas da landing`.
+
 ## Onde Estao as Respostas do Case
 
 Consultas finais:
@@ -176,7 +219,7 @@ Consultas finais:
 
 Material exploratorio:
 
-- `analysis/01_eda.py`
+- `analysis/01_eda.ipynb`
 
 Tabelas finais para avaliacao:
 

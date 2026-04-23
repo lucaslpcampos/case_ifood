@@ -1,3 +1,5 @@
+"""Configuracoes operacionais compartilhadas do pipeline."""
+
 MONTHS = [(2023, month) for month in range(1, 6)]
 
 SCHEMA_LANDING = "taxi_nyc_landing"
@@ -48,24 +50,75 @@ TAXI_CONFIGS = {
 FACT_SOURCE_TAXI_TYPES = ("yellow", "green")
 
 
-def get_volume_root(catalog):
+def get_volume_root(catalog: str) -> str:
+    """
+    Monta o path raiz do volume usado pela landing zone.
+
+    Args:
+        catalog: Nome do catalogo Unity Catalog.
+
+    Returns:
+        Path raiz do volume no formato `/Volumes/<catalog>/<schema>/<volume>`.
+    """
     return f"/Volumes/{catalog}/{SCHEMA_LANDING}/{VOLUME_NAME}"
 
 
-def get_checkpoint_root(catalog):
+def get_checkpoint_root(catalog: str) -> str:
+    """
+    Monta o path raiz usado para checkpoints do pipeline.
+
+    Args:
+        catalog: Nome do catalogo Unity Catalog.
+
+    Returns:
+        Path raiz dos checkpoints dentro do volume da landing.
+    """
     return f"{get_volume_root(catalog)}/_checkpoints"
 
 
-def get_landing_path(catalog, taxi_type):
+def get_landing_path(catalog: str, taxi_type: str) -> str:
+    """
+    Retorna o path base da landing para um tipo de taxi.
+
+    Args:
+        catalog: Nome do catalogo Unity Catalog.
+        taxi_type: Tipo de taxi configurado em `TAXI_CONFIGS`.
+
+    Returns:
+        Path base da landing do tipo de taxi informado.
+    """
     return f"{get_volume_root(catalog)}/{TAXI_CONFIGS[taxi_type]['landing_subpath']}"
 
 
-def get_landing_month_path(catalog, taxi_type, year, month):
+def get_landing_month_path(catalog: str, taxi_type: str, year: int, month: int) -> str:
+    """
+    Retorna o path particionado da landing por ano e mes.
+
+    Args:
+        catalog: Nome do catalogo Unity Catalog.
+        taxi_type: Tipo de taxi configurado em `TAXI_CONFIGS`.
+        year: Ano da particao.
+        month: Mes da particao.
+
+    Returns:
+        Path da landing para o ano e mes informados.
+    """
     return (
         f"{get_landing_path(catalog, taxi_type)}"
         f"/year={year}/month={month:02d}"
     )
 
 
-def get_fqn(catalog, schema, table):
+def get_fqn(catalog: str, schema: str, table: str) -> str:
+    """
+    Monta o nome totalmente qualificado de uma tabela.
+
+    Args:
+        catalog: Nome do catalogo Unity Catalog.
+        schema: Nome do schema da tabela.
+        table: Nome da tabela.
+
+    Returns:
+        FQN da tabela no formato `<catalog>.<schema>.<table>`.
+    """
     return f"{catalog}.{schema}.{table}"

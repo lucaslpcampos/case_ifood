@@ -7,11 +7,10 @@ include:
 
 sync:
   exclude:
-    - .claude/
-    - .claude/**
     - tests/
     - tests/**
-    - presentation_notes_real_world_scenarios.md
+    - docs/
+    - docs/**
 
 variables:
   catalog:

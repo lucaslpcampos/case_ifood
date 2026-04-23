@@ -1,3 +1,7 @@
+"""Regras de data quality reutilizaveis nas camadas do pipeline."""
+
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql.column import Column
 from pyspark.sql.functions import (
     array,
     array_compact,
@@ -8,7 +12,18 @@ from pyspark.sql.functions import (
     when,
 )
 
-def silver_rules(study_start_date, study_end_exclusive):
+
+def silver_rules(study_start_date: str, study_end_exclusive: str) -> dict[str, Column]:
+    """
+    Monta o ruleset de data quality aplicado na camada Silver.
+
+    Args:
+        study_start_date: Data inicial inclusiva do intervalo de estudo.
+        study_end_exclusive: Data final exclusiva do intervalo de estudo.
+
+    Returns:
+        Dicionario com o nome de cada regra e sua expressao booleana em Spark.
+    """
     return {
         "passenger_count_not_null": col("passenger_count").isNotNull(),
         "passenger_count_positive": col("passenger_count") > 0,
@@ -29,7 +44,22 @@ QUALITY_RULESET_KEYS = {
 }
 
 
-def apply_silver_rules(df, study_start_date, study_end_exclusive):
+def apply_silver_rules(
+    df: DataFrame,
+    study_start_date: str,
+    study_end_exclusive: str,
+) -> tuple[DataFrame, DataFrame]:
+    """
+    Separa os registros validos e quarentenados da camada Silver.
+
+    Args:
+        df: DataFrame de entrada ja padronizado para a Silver.
+        study_start_date: Data inicial inclusiva do intervalo de estudo.
+        study_end_exclusive: Data final exclusiva do intervalo de estudo.
+
+    Returns:
+        Tupla com o DataFrame limpo e o DataFrame enviado para quarentena.
+    """
     rules = silver_rules(study_start_date, study_end_exclusive)
     passes = lit(True)
     for predicate in rules.values():
@@ -61,7 +91,18 @@ GOLD_CONSTRAINTS = {
 }
 
 
-def apply_gold_constraints(spark, fqn, table_key):
+def apply_gold_constraints(spark: SparkSession, fqn: str, table_key: str) -> None:
+    """
+    Aplica constraints fisicas configuradas para uma tabela Gold.
+
+    Args:
+        spark: Sessao Spark ativa.
+        fqn: Nome totalmente qualificado da tabela alvo.
+        table_key: Chave da tabela usada para buscar constraints em `GOLD_CONSTRAINTS`.
+
+    Returns:
+        None. A funcao executa DDLs diretamente no catalogo.
+    """
     for ddl_template in GOLD_CONSTRAINTS.get(table_key, []):
         try:
             spark.sql(ddl_template.format(fqn=fqn))
